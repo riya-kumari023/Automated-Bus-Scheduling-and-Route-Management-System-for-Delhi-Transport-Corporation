@@ -1,0 +1,105 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+from sklearn.preprocessing import LabelEncoder
+
+# Load the dataset
+bus_data = pd.read_csv('bus_data.csv')
+
+# Convert the timestamp to a datetime object
+bus_data['tmstmp'] = pd.to_datetime(bus_data['tmstmp'])
+
+# Check for missing values
+print("Missing values in each column:")
+print(bus_data.isnull().sum())
+
+# Fill missing values or drop columns with too many missing values
+bus_data = bus_data.dropna()  # Example of dropping missing data
+
+# Display general information
+print("\nDataset Info:")
+print(bus_data.info())
+
+# Encode categorical features
+label_encoders = {}
+for column in bus_data.select_dtypes(include=['object']).columns:
+    label_encoders[column] = LabelEncoder()
+    bus_data[column] = label_encoders[column].fit_transform(bus_data[column])
+
+# Print first few rows after encoding
+print("\nFirst few rows after encoding:")
+print(bus_data.head())
+
+# Descriptive Analytics
+# Time Series Analysis - Bus activity over time
+plt.figure(figsize=(12, 6))
+bus_data.set_index('tmstmp')['vid'].resample('H').count().plot()
+plt.title('Bus Activity Over Time')
+plt.xlabel('Time')
+plt.ylabel('Number of Buses')
+plt.show()
+
+# Speed and Distance Analysis
+plt.figure(figsize=(10, 6))
+sns.scatterplot(data=bus_data, x='spd', y='pdist', hue='rt')
+plt.title('Speed vs Distance by Route')
+plt.xlabel('Speed (km/h)')
+plt.ylabel('Distance (meters)')
+plt.show()
+
+# Geospatial Analysis - Plot routes
+import geopandas as gpd
+from shapely.geometry import Point
+
+# Convert to GeoDataFrame
+bus_data['geometry'] = bus_data.apply(lambda row: Point(row['lon'], row['lat']), axis=1)
+gdf = gpd.GeoDataFrame(bus_data, geometry='geometry')
+
+# Plot routes
+plt.figure(figsize=(10, 10))
+gdf.plot(column='rt', cmap='tab20', legend=True)
+plt.title('Bus Routes on the Map')
+plt.show()
+
+# Predictive Analytics
+# Select Features and Target for Route Prediction
+X = bus_data[['lat', 'lon', 'spd', 'pdist', 'hdg']]
+X['hour'] = bus_data['tmstmp'].dt.hour  # Extract hour from timestamp
+y = bus_data['rt']
+
+# Split the data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+# Train a RandomForestClassifier
+model = RandomForestClassifier(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+y_pred = model.predict(X_test)
+
+# Evaluate the model
+print("\nModel Evaluation:")
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("\nConfusion Matrix:\n", confusion_matrix(y_test, y_pred))
+print("\nClassification Report:\n", classification_report(y_test, y_pred))
+
+# Feature Importance
+importances = model.feature_importances_
+indices = np.argsort(importances)[::-1]
+plt.figure(figsize=(10, 6))
+plt.title("Feature Importance for Route Prediction")
+plt.bar(range(X.shape[1]), importances[indices], align="center")
+plt.xticks(range(X.shape[1]), X.columns[indices], rotation=90)
+plt.xlim([-1, X.shape[1]])
+plt.show()
+
+# Optimization and Decision Making
+# Example: Suggest optimal times for specific routes
+optimal_times = bus_data.groupby(['rt', bus_data['tmstmp'].dt.hour]).agg({'spd': 'mean'}).reset_index()
+optimal_times = optimal_times.sort_values(by=['rt', 'spd'], ascending=[True, False])
+
+# Display optimal times for routes based on average speed
+print("\nOptimal Times for Routes Based on Average Speed:")
+print(optimal_times)
